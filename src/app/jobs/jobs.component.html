@@ -1,0 +1,31 @@
+<mat-card class="jobs-container">
+  <mat-list>
+    <h3 mat-subheader>jobs</h3>
+    <div *ngFor="let job of jobs" [ngSwitch]="job.type">
+      <mat-list-item *ngSwitchCase="'done'">
+        <mat-icon mat-list-icon>cloud_done</mat-icon>
+        <p mat-line>{{job.name}}</p>
+      </mat-list-item>
+      <mat-list-item *ngSwitchCase="'download'">
+        <mat-icon mat-list-icon>cloud_download</mat-icon>
+        <p mat-line>{{job.name}}</p>
+        <mat-progress-bar
+          [color]="'primary'"
+          [mode]="'determinate'"
+          [value]="job.progress"
+        >
+        </mat-progress-bar>
+      </mat-list-item>
+      <mat-list-item *ngSwitchCase="'upload'">
+        <mat-icon mat-list-icon>cloud_upload</mat-icon>
+        <p mat-line>{{job.name}}</p>
+        <mat-progress-bar
+          [color]="'primary'"
+          [mode]="'determinate'"
+          [value]="job.progress"
+        >
+        </mat-progress-bar>
+      </mat-list-item>
+    </div>
+  </mat-list>
+</mat-card>

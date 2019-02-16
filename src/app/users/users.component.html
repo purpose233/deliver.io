@@ -1,0 +1,18 @@
+<mat-card class="users-container">
+  <mat-card
+    class="user-container"
+    *ngFor="let user of users"
+  >
+    <div class="avatar">
+      <mat-icon class="avatar-icon" svgIcon="user-secret"></mat-icon>
+    </div>
+    <p class="name"><b>{{ user.name }}</b></p>
+    <button
+      mat-raised-button
+      matTooltip="transfer file to"
+      class="transfer-confirm">
+      <mat-icon mat-list-icon class="transfer-btn">send</mat-icon>
+      Transfer
+    </button>
+  </mat-card>
+</mat-card>

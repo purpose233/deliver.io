@@ -1,0 +1,25 @@
+@import "../app.common";
+
+.me-container {
+  width: calc(100% - 32px);
+  height: calc(100% - 32px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+
+  .avatar {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: #cdcdcd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .avatar-icon {
+      @include md-icon-size(80px);
+      color: #4e4e4e;
+    }
+  }
+}
