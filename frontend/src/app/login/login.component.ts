@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { DeliverService } from '../deliver.service';
 
 @Component({
   selector: 'app-login',
@@ -6,10 +7,14 @@ import { Component, OnInit } from '@angular/core';
   styleUrls: ['./login.component.scss']
 })
 export class LoginComponent implements OnInit {
+  name: string;
 
-  constructor() { }
+  constructor(private deliverService: DeliverService) { }
 
   ngOnInit() {
   }
 
+  sendName(): void {
+    this.deliverService.sendName(this.name);
+  }
 }

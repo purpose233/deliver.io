@@ -2,11 +2,16 @@
   <mat-card class="login-panel">
     <div></div>
     <mat-form-field class="login-input">
-      <input matInput type="text" placeholder="Please input your name" [(ngModel)]="value">
-      <button mat-button *ngIf="value" matSuffix mat-icon-button aria-label="Clear" (click)="value=''">
+      <input matInput type="text" placeholder="Please input your name" [(ngModel)]="name">
+      <button mat-button *ngIf="name" matSuffix mat-icon-button aria-label="Clear" (click)="name=''">
         <mat-icon>close</mat-icon>
       </button>
     </mat-form-field>
-    <button mat-raised-button color="primary" class="login-confirm">Confirm</button>
+    <button
+      mat-raised-button
+      color="primary"
+      class="login-confirm"
+      (click)=""
+    >Confirm</button>
   </mat-card>
 </div>

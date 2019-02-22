@@ -15,6 +15,9 @@ import { JobsComponent } from './jobs/jobs.component';
 import { FilesComponent } from './files/files.component';
 import { MeComponent } from './me/me.component';
 
+import { SocketIoModule, SocketIoConfig } from 'ngx-socket-io';
+const config: SocketIoConfig = { url: 'http://localhost:4000', options: {} };
+
 @NgModule({
   declarations: [
     AppComponent,
@@ -30,6 +33,7 @@ import { MeComponent } from './me/me.component';
     AppRoutingModule,
     FormsModule,
     BrowserAnimationsModule,
+    SocketIoModule.forRoot(config),
     MatButtonModule,
     MatInputModule,
     MatIconModule,
