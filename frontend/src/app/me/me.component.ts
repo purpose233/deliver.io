@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { DeliverService } from '../deliver.service';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material';
 
@@ -9,7 +10,9 @@ import { MatIconRegistry } from '@angular/material';
 })
 export class MeComponent implements OnInit {
 
-  constructor(iconRegistry: MatIconRegistry, sanitizer: DomSanitizer) {
+  constructor(private iconRegistry: MatIconRegistry,
+              private sanitizer: DomSanitizer,
+              private deliverService: DeliverService) {
     iconRegistry.addSvgIcon(
       'user-secret',
       sanitizer.bypassSecurityTrustResourceUrl('assets/img/user-secret-solid.svg'));

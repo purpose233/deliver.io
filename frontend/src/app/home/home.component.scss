@@ -1,0 +1,16 @@
+.app-container {
+  //margin: 20px auto;
+  width: 80%;
+  min-width: 800px;
+  max-width: 1200px;
+  height: calc(100% - 40px);
+  position: relative;
+  margin: 0 auto;
+  top: 20px;
+
+  app-me, app-users, app-files, app-jobs {
+    margin: 20px;
+    width: calc(100% - 40px);
+    height: calc(100% - 40px);
+  }
+}

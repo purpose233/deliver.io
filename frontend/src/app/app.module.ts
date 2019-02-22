@@ -8,7 +8,8 @@ import { LoginComponent } from './login/login.component';
 import { FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatButtonModule, MatInputModule, MatIconModule,
-  MatCardModule, MatGridListModule, MatListModule, MatProgressBarModule } from '@angular/material';
+  MatCardModule, MatGridListModule, MatListModule,
+  MatProgressBarModule, MatSnackBarModule } from '@angular/material';
 
 import { UsersComponent } from './users/users.component';
 import { JobsComponent } from './jobs/jobs.component';
@@ -16,6 +17,7 @@ import { FilesComponent } from './files/files.component';
 import { MeComponent } from './me/me.component';
 
 import { SocketIoModule, SocketIoConfig } from 'ngx-socket-io';
+import { HomeComponent } from './home/home.component';
 const config: SocketIoConfig = { url: 'http://localhost:4000', options: {} };
 
 @NgModule({
@@ -25,7 +27,8 @@ const config: SocketIoConfig = { url: 'http://localhost:4000', options: {} };
     UsersComponent,
     JobsComponent,
     FilesComponent,
-    MeComponent
+    MeComponent,
+    HomeComponent
   ],
   imports: [
     BrowserModule,
@@ -40,7 +43,8 @@ const config: SocketIoConfig = { url: 'http://localhost:4000', options: {} };
     MatCardModule,
     MatGridListModule,
     MatListModule,
-    MatProgressBarModule
+    MatProgressBarModule,
+    MatSnackBarModule
   ],
   providers: [],
   bootstrap: [AppComponent]
