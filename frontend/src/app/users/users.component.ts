@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { DeliverService } from '../deliver.service';
 
 @Component({
   selector: 'app-users',
@@ -6,15 +7,13 @@ import { Component, OnInit } from '@angular/core';
   styleUrls: ['./users.component.scss']
 })
 export class UsersComponent implements OnInit {
-  users = [
-    {name: 'xiaoming'},
-    {name: 'xiaogang'},
-    {name: 'xiaohong'}
-  ];
 
-  constructor() { }
+  constructor(private deliverService: DeliverService) { }
 
   ngOnInit() {
   }
 
+  async prepareConnection() {
+
+  }
 }
