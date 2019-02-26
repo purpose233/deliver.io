@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 import { Socket } from 'ngx-socket-io';
-import {of} from "rxjs";
 
 const CHUNK_SIZE = 16384;
 
@@ -9,6 +8,7 @@ export interface User {
   id: string;
 }
 
+// TODO: handle the relation with task
 export interface Task {
   type: 'send' | 'receive',
   progress: number,
@@ -28,7 +28,7 @@ export interface P2PFileInfo {
   fileType: string
 }
 
-export interface ConfirmInfo {
+export interface ConfirmSendInfo {
   remoteId: string,
   received: boolean
 }
@@ -55,6 +55,11 @@ export interface CandidateInfo {
   remoteId: string
 }
 
+// TODO: handle all types of errors
+export interface ErrorInfo {
+  type: string
+}
+
 // TODO: handle multiple p2p transfer
 
 @Injectable({
@@ -67,11 +72,13 @@ export class DeliverService {
   // connection: RTCPeerConnection;
 
   constructor(private socket: Socket) {
+    // data type: User
     socket.on('users', (data) => {
       this.users = JSON.parse(data);
     });
 
-    socket.on('confirmReceive', (data) => {
+    // data type: ConfirmSendInfo
+    socket.on('confirmSend', (data) => {
       if (data.received) {
         let connectionInfo = this.findConnectionInfo(data.remoteId);
         this.prepareSend(connectionInfo.remoteId);
@@ -81,20 +88,28 @@ export class DeliverService {
       }
     });
 
-    socket.on('send', (data) => {
+    // data type: P2PFileInfo
+    socket.on('confirmReceive', (data) => {
       this.confirmReceive(true, data);
     });
 
-    socket.on('icecandidate', async (data) => {
+    // data type: CandidateInfo
+    socket.on('candidate', async (data) => {
       let candidateInfo: CandidateInfo = JSON.parse(data);
       let pc = this.findConnectionInfo(candidateInfo.remoteId).pc;
       await pc.addIceCandidate(candidateInfo.candidate);
     });
 
+    // data type: DescInfo
     socket.on('desc', async (data) => {
       let descInfo: DescInfo = JSON.parse(data);
       let pc = this.findConnectionInfo(descInfo.remoteId).pc;
       await pc.setRemoteDescription(descInfo.desc);
+    });
+
+    // data type: ErrorInfo
+    socket.on('error', (data) => {
+
     });
   }
 
@@ -115,7 +130,7 @@ export class DeliverService {
   }
 
   confirmReceive(received: boolean, p2pFileInfo: P2PFileInfo): void {
-    let data: ConfirmInfo = {
+    let data: ConfirmSendInfo = {
       remoteId: p2pFileInfo.remoteId,
       received
     };
@@ -243,7 +258,7 @@ export class DeliverService {
       desc: offer,
       remoteId
     };
-    this.socket.emit('offer', data);
+    this.socket.emit('desc', data);
     connectionInfo.dataChannel = this.createSendChannel(pc);
   }
 
@@ -263,7 +278,7 @@ export class DeliverService {
       desc: answer,
       remoteId
     };
-    this.socket.emit('answer', data);
+    this.socket.emit('desc', data);
     this.createReceiveChannel(pc);
   }
 
