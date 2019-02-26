@@ -7,10 +7,18 @@
       <mat-icon class="avatar-icon" svgIcon="user-secret"></mat-icon>
     </div>
     <p class="name"><b>{{ user.name }}</b></p>
+    <input
+      class="file-input"
+      id="{{ 'fileInput' + user.id }}"
+      type="file"
+      (change)="send(user.id)"
+    />
     <button
       mat-raised-button
       matTooltip="transfer file to"
-      class="transfer-confirm">
+      class="transfer-confirm"
+      (click)="triggerFileInput(user.id)"
+    >
       <mat-icon mat-list-icon class="transfer-btn">send</mat-icon>
       Transfer
     </button>

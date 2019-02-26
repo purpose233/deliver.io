@@ -2,6 +2,13 @@ import { Injectable } from '@angular/core';
 import { Socket } from 'ngx-socket-io';
 
 const CHUNK_SIZE = 16384;
+const CONFIGURATION = {
+  iceServers: [
+    {urls: "stun:23.21.150.121"},
+    {urls: "stun:stun.l.google.com:19302"},
+    {urls: "turn:numb.viagenie.ca", credential: "webrtcdemo", username: "louis%40mozilla.com"}
+  ]
+};
 
 export interface User {
   name: string;
@@ -37,6 +44,7 @@ export interface ConnectionInfo {
   pc: RTCPeerConnection,
   dataChannel: RTCDataChannel,
   file: File,
+  fileName: string,
   fileSize: number,
   remoteId: string,
 
@@ -61,6 +69,7 @@ export interface ErrorInfo {
 }
 
 // TODO: handle multiple p2p transfer
+// TODO: add sending status for send button
 
 @Injectable({
   providedIn: 'root'
@@ -68,17 +77,18 @@ export interface ErrorInfo {
 export class DeliverService {
   name: string;
   users: User[];
-  connections: ConnectionInfo[];
+  connections: ConnectionInfo[] = [];
   // connection: RTCPeerConnection;
 
   constructor(private socket: Socket) {
     // data type: User
     socket.on('users', (data) => {
-      this.users = JSON.parse(data);
+      this.users = data;
     });
 
     // data type: ConfirmSendInfo
     socket.on('confirmSend', (data) => {
+      console.log('socket on confirmSend');
       if (data.received) {
         let connectionInfo = this.findConnectionInfo(data.remoteId);
         this.prepareSend(connectionInfo.remoteId);
@@ -90,21 +100,37 @@ export class DeliverService {
 
     // data type: P2PFileInfo
     socket.on('confirmReceive', (data) => {
+      console.log('socket on confirmReceive');
       this.confirmReceive(true, data);
     });
 
     // data type: CandidateInfo
     socket.on('candidate', async (data) => {
-      let candidateInfo: CandidateInfo = JSON.parse(data);
+      console.log('socket on candidate, data: ', data);
+      let candidateInfo: CandidateInfo = data;
+      // Candidate missing values for both sdpMid and sdpMLineIndex
+      if (candidateInfo.candidate == null) {
+        return;
+      }
       let pc = this.findConnectionInfo(candidateInfo.remoteId).pc;
       await pc.addIceCandidate(candidateInfo.candidate);
     });
 
     // data type: DescInfo
     socket.on('desc', async (data) => {
-      let descInfo: DescInfo = JSON.parse(data);
+      console.log('socket on desc');
+      let descInfo: DescInfo = data;
       let pc = this.findConnectionInfo(descInfo.remoteId).pc;
       await pc.setRemoteDescription(descInfo.desc);
+      if (descInfo.desc.type === 'offer') {
+        let answer = await this.createAnswer(pc);
+        let data: DescInfo = {
+          desc: answer,
+          remoteId: descInfo.remoteId
+        };
+        this.socket.emit('desc', data);
+        this.createReceiveChannel(pc);
+      }
     });
 
     // data type: ErrorInfo
@@ -136,27 +162,22 @@ export class DeliverService {
     };
     this.socket.emit('receive', data);
     if (received) {
-      let connectionInfo = this.createConnectionInfo(p2pFileInfo.remoteId,
-        null, p2pFileInfo.fileSize);
+      let connectionInfo = this.createConnectionInfo(p2pFileInfo.remoteId, p2pFileInfo);
       this.connections.push(connectionInfo);
       this.prepareReceive(connectionInfo.remoteId);
     }
   }
 
   createConnectionInfo(remoteId: string,
-                       file: File = null,
-                       fileSize: number = -1): ConnectionInfo {
-    let size = -1;
-    if (file) {
-      size = file.size;
-    } else if (fileSize !== -1) {
-      size = fileSize;
-    }
+                       file: File | P2PFileInfo): ConnectionInfo {
     return {
-      pc: new RTCPeerConnection(),
-      remoteId, file,
+      pc: new RTCPeerConnection(CONFIGURATION),
+      remoteId,
       dataChannel: null,
-      fileSize: size,
+      file: file instanceof File ? file : null,
+      // TODO: unite the File and P2PFileInfo so that it could be simple
+      fileName: file instanceof File ? file.name : file.fileName,
+      fileSize: file instanceof File ? file.size : file.fileSize,
       receivedBuffer: [],
       receivedSize: 0
     };
@@ -244,6 +265,7 @@ export class DeliverService {
   async prepareSend(remoteId: string) {
     let connectionInfo = this.findConnectionInfo(remoteId);
     let pc = connectionInfo.pc;
+    connectionInfo.dataChannel = this.createSendChannel(pc);
     pc.addEventListener('icecandidate', async event => {
       console.log('Local ICE candidate: ', event.candidate);
       // await remoteConnection.addIceCandidate(event.candidate);
@@ -259,7 +281,6 @@ export class DeliverService {
       remoteId
     };
     this.socket.emit('desc', data);
-    connectionInfo.dataChannel = this.createSendChannel(pc);
   }
 
   async prepareReceive(remoteId: string) {
@@ -273,18 +294,11 @@ export class DeliverService {
       };
       this.socket.emit('candidate', data);
     });
-    let answer = await this.createAnswer(pc);
-    let data: DescInfo = {
-      desc: answer,
-      remoteId
-    };
-    this.socket.emit('desc', data);
-    this.createReceiveChannel(pc);
   }
 
   sendData(pc: RTCPeerConnection, sendChannel: RTCDataChannel): void {
     const file = this.findConnectionInfo(pc).file;
-    console.log(`File is ${[file.name, file.size, file.type, file.lastModified].join(' ')}`);
+    console.log(`Begin send file: ${[file.name, file.size, file.type, file.lastModified].join(' ')}`);
 
     let fileReader = new FileReader();
     let offset = 0;
@@ -330,8 +344,8 @@ export class DeliverService {
     console.log('Receive Channel Callback');
     let receiveChannel = event.channel;
     receiveChannel.binaryType = 'arraybuffer';
-    receiveChannel.onmessage = () => {
-      this.onReceiveMessageCallback(event, pc, receiveChannel);
+    receiveChannel.onmessage = (e) => {
+      this.onReceiveMessageCallback(e, pc, receiveChannel);
     };
     receiveChannel.onopen = () => {
       this.onReceiveChannelStateChange(pc, receiveChannel);
@@ -353,6 +367,14 @@ export class DeliverService {
       const blob = new Blob(connectionInfo.receivedBuffer);
       const url = URL.createObjectURL(blob);
       // connectionInfo.receiveBuffer = [];
+      console.log('Received blob: ' + blob);
+
+      let link = document.createElement('a');
+      link.style.display = 'none';
+      link.href = url;
+      link.setAttribute('download', connectionInfo.fileName);
+      document.body.appendChild(link);
+      link.click();
 
       this.closeConnection(pc);
     }
@@ -371,6 +393,6 @@ export class DeliverService {
 
   sendName(name: string) {
     this.name = name;
-    this.socket.emit('name', name);
+    this.socket.emit('name', { name });
   }
 }

@@ -1,5 +1,3 @@
-import {ConfirmSendInfo} from "../../frontend/src/app/deliver.service";
-
 module.exports = function (io) {
   // user: name, id, socket
   let users = [];
@@ -23,42 +21,41 @@ module.exports = function (io) {
 
   function findUser(id) {
     for (let user of users) {
-      if (id === id) {
+      if (id === user.id) {
         return user;
       }
     }
   }
 
-  function getUserStr(excludedId) {
-    let tempUsers = [];
+  function getExcludedUsers(excludedId) {
+    let excludedUsers = [];
     for (let user of users) {
       if (user.id === excludedId) {
         continue;
       }
-      tempUsers.push({
+      excludedUsers.push({
         name: user.name,
         id: user.id
       });
     }
-    return JSON.stringify(tempUsers);
+    return excludedUsers;
   }
 
   function updateUsers() {
     for (let user of users) {
-      user.socket.emit('users', getUserStr(user.socket.id));
+      user.socket.emit('users', getExcludedUsers(user.socket.id));
     }
   }
 
   // TODO: wrap the name data in object
-  // TODO: JSON.parse for socket on
   io.sockets.on('connection', function(socket) {
     // add name to clojure so that it needn't be searched
     let name = null;
 
     socket.on('name', function(data) {
-      console.log(data + ' joins!');
-      name = data;
-      addUser(socket, data);
+      name = data.name;
+      console.log(name + ' joins!');
+      addUser(socket, name);
       updateUsers();
     });
 
@@ -74,6 +71,7 @@ module.exports = function (io) {
 
     // data type: P2PFileInfo
     socket.on('send', function(data) {
+      console.log('socket on send from ' + name);
       let remoteUser = findUser(data.remoteId);
       if (!remoteUser) {
         // TODO: send error
@@ -89,6 +87,7 @@ module.exports = function (io) {
 
     // data type: ConfirmSendInfo
     socket.on('receive', function(data) {
+      console.log('socket on receive from ' + name);
       let remoteUser = findUser(data.remoteId);
       if (!remoteUser) {
         // TODO: send error
@@ -99,6 +98,7 @@ module.exports = function (io) {
 
     // data type: DescInfo
     socket.on('desc', function(data) {
+      console.log('socket on desc from ' + name);
       let remoteUser = findUser(data.remoteId);
       if (!remoteUser) {
         // TODO: send error
@@ -109,6 +109,7 @@ module.exports = function (io) {
 
     // data type: CandidateInfo
     socket.on('candidate', function(data) {
+      console.log('socket on candidate from ' + name);
       let remoteUser = findUser(data.remoteId);
       if (!remoteUser) {
         // TODO: send error
@@ -119,6 +120,7 @@ module.exports = function (io) {
 
     socket.on('disconnect', function() {
       deleteUser(socket);
+      updateUsers();
     });
   });
 
