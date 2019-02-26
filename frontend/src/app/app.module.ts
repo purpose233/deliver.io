@@ -18,7 +18,7 @@ import { MeComponent } from './me/me.component';
 
 import { SocketIoModule, SocketIoConfig } from 'ngx-socket-io';
 import { HomeComponent } from './home/home.component';
-const config: SocketIoConfig = { url: 'http://localhost:4000', options: {} };
+const config: SocketIoConfig = { url: '', options: {} };
 
 @NgModule({
   declarations: [
