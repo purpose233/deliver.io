@@ -47,7 +47,6 @@ module.exports = function (io) {
     }
   }
 
-  // TODO: wrap the name data in object
   io.sockets.on('connection', function(socket) {
     // add name to clojure so that it needn't be searched
     let name = null;
@@ -57,14 +56,6 @@ module.exports = function (io) {
       console.log(name + ' joins!');
       addUser(socket, name);
       updateUsers();
-    });
-
-    socket.on('upload', function(data) {
-
-    });
-
-    socket.on('download', function(data) {
-
     });
 
     // TODO: extract the same handle function for socket events
@@ -116,6 +107,17 @@ module.exports = function (io) {
       }
       data.remoteId = socket.id;
       remoteUser.socket.emit('candidate', data);
+    });
+
+    // data type: ReceiveState
+    socket.on('receiveState', function(data) {
+      console.log('socket on receive from' + name);
+      let remoteUser = findUser(data.remoteId);
+      if (!remoteUser) {
+        // TODO: send error
+      }
+      data.remoteId = socket.id;
+      remoteUser.socket.emit('receiveState', data);
     });
 
     socket.on('disconnect', function() {

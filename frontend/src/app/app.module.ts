@@ -12,12 +12,11 @@ import { MatButtonModule, MatInputModule, MatIconModule,
   MatProgressBarModule, MatSnackBarModule } from '@angular/material';
 
 import { UsersComponent } from './users/users.component';
-import { JobsComponent } from './jobs/jobs.component';
-import { FilesComponent } from './files/files.component';
 import { MeComponent } from './me/me.component';
+import { HomeComponent } from './home/home.component';
+import { TasksComponent } from './tasks/tasks.component';
 
 import { SocketIoModule, SocketIoConfig } from 'ngx-socket-io';
-import { HomeComponent } from './home/home.component';
 const config: SocketIoConfig = { url: '', options: {} };
 
 @NgModule({
@@ -25,10 +24,9 @@ const config: SocketIoConfig = { url: '', options: {} };
     AppComponent,
     LoginComponent,
     UsersComponent,
-    JobsComponent,
-    FilesComponent,
     MeComponent,
-    HomeComponent
+    HomeComponent,
+    TasksComponent
   ],
   imports: [
     BrowserModule,

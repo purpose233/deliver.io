@@ -1,26 +1,24 @@
 <mat-card class="users-container">
-  <mat-card
-    class="user-container"
-    *ngFor="let user of deliverService.users"
-  >
-    <div class="avatar">
-      <mat-icon class="avatar-icon" svgIcon="user-secret"></mat-icon>
-    </div>
-    <p class="name"><b>{{ user.name }}</b></p>
-    <input
-      class="file-input"
-      id="{{ 'fileInput' + user.id }}"
-      type="file"
-      (change)="send(user.id)"
-    />
-    <button
-      mat-raised-button
-      matTooltip="transfer file to"
-      class="transfer-confirm"
-      (click)="triggerFileInput(user.id)"
-    >
-      <mat-icon mat-list-icon class="transfer-btn">send</mat-icon>
-      Transfer
-    </button>
-  </mat-card>
+  <mat-list>
+    <h3 mat-subheader>users</h3>
+    <mat-list-item *ngFor="let user of deliverService.users">
+      <mat-icon mat-list-icon svgIcon="user-secret"></mat-icon>
+      <h4 mat-line><b>{{user.name}}</b></h4>
+      <input
+        class="file-input"
+        id="{{ 'fileInput' + user.id }}"
+        type="file"
+        (change)="send(user.id)"
+      />
+      <button
+        mat-raised-button
+        matTooltip="transfer file to"
+        class="transfer-confirm"
+        (click)="triggerFileInput(user.id)"
+        disabled="{{ user.isTransferring }}"
+      >
+        <mat-icon class="transfer-btn">send</mat-icon>
+      </button>
+    </mat-list-item>
+  </mat-list>
 </mat-card>

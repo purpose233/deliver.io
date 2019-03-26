@@ -1,7 +1,10 @@
 import { Injectable } from '@angular/core';
 import { Socket } from 'ngx-socket-io';
 
-const CHUNK_SIZE = 16384;
+// The max cache size of data channel is 16mb, so the CHUNK_SIZE * SLICE_COUNT
+//  shouldn't be greater than 16mb.
+const CHUNK_SIZE = 256 * 1024;
+const SLICE_COUNT = 16;
 const CONFIGURATION = {
   iceServers: [
     {urls: 'stun:23.21.150.121'},
@@ -13,26 +16,30 @@ const CONFIGURATION = {
 export interface User {
   name: string;
   id: string;
+  isTransferring?: boolean;
 }
 
 // TODO: handle the relation with task
 export interface Task {
   type: 'send' | 'receive';
+  state: 'finished' | 'inProgress' | 'rejected';
   progress: number;
   remoteName: string;
   fileName: string;
-  fileSize: string;
+  fileSize: number;
   fileType: string;
   blob: Blob;
   url: string;
+  // the count of transferred Bytes per second
+  speed: number;
 }
 
 export interface P2PFileInfo {
   remoteName: string;
   remoteId: string;
-  fileName: string;
-  fileSize: number;
-  fileType: string;
+  name: string;
+  size: number;
+  type: string;
 }
 
 export interface ConfirmSendInfo {
@@ -47,8 +54,15 @@ export interface ConnectionInfo {
   fileName: string;
   fileSize: number;
   remoteId: string;
+  task: Task;
+  sliceCount: number;
 
-  // used for received
+  // used for send
+  isSending: boolean;
+  reader: FileReader;
+  readOffset: number;
+
+  // used for receive
   receivedBuffer: any[];
   receivedSize: number;
 }
@@ -61,6 +75,12 @@ export interface DescInfo {
 export interface CandidateInfo {
   candidate: RTCIceCandidate;
   remoteId: string;
+}
+
+export interface ReceiveState {
+  state: 'finished' | 'error' | 'inProgress';
+  remoteId: string;
+  progress?: number;
 }
 
 // TODO: handle all types of errors
@@ -78,22 +98,27 @@ export class DeliverService {
   name: string;
   users: User[];
   connections: ConnectionInfo[] = [];
-  // connection: RTCPeerConnection;
+  tasks: Task[] = [];
 
   constructor(private socket: Socket) {
     // data type: User
     socket.on('users', (data) => {
-      this.users = data;
+      const userInfo: User[] = data;
+      for (const user of userInfo) {
+        user.isTransferring = false;
+      }
+      this.users = userInfo;
     });
 
     // data type: ConfirmSendInfo
     socket.on('confirmSend', (data) => {
       console.log('socket on confirmSend');
+      const connectionInfo = this.findConnectionInfo(data.remoteId);
       if (data.received) {
-        const connectionInfo = this.findConnectionInfo(data.remoteId);
         this.prepareSend(connectionInfo.remoteId);
       } else {
         console.log('不样发送');
+        connectionInfo.task.state = 'rejected';
         this.closeConnection(data.remoteId);
       }
     });
@@ -133,10 +158,40 @@ export class DeliverService {
       }
     });
 
+    // data type: ReceiveState
+    socket.on('receiveState', (data) => {
+      // console.log('socket on receive state');
+      const receiveState: ReceiveState = data;
+      const connectionInfo = this.findConnectionInfo(receiveState.remoteId);
+      if (receiveState.state === 'finished') {
+        connectionInfo.task.state = 'finished';
+        this.closeConnection(receiveState.remoteId);
+      } else if (receiveState.state === 'inProgress') {
+        this.continueSend(connectionInfo);
+      }
+    });
+
     // data type: ErrorInfo
     socket.on('error', (data) => {
 
     });
+  }
+
+  createTask(type: 'send' | 'receive',
+             file: File | P2PFileInfo,
+             remoteId: string): Task {
+    return {
+      type,
+      state: 'inProgress',
+      progress: 0,
+      remoteName: this.findUser(remoteId).name,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      blob: null,
+      url: null,
+      speed: 0
+    };
   }
 
   checkFile(file: File): boolean {
@@ -145,12 +200,14 @@ export class DeliverService {
 
   commitSend(remoteId: string, file: File): void {
     const data: P2PFileInfo = {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
+      name: file.name,
+      size: file.size,
+      type: file.type,
       remoteId, remoteName: null
     };
-    const connectionInfo = this.createConnectionInfo(remoteId, file);
+    const task = this.createTask('send', file, remoteId);
+    this.tasks.push(task);
+    const connectionInfo = this.createConnectionInfo(remoteId, file, task);
     this.connections.push(connectionInfo);
     this.socket.emit('send', data);
   }
@@ -161,23 +218,33 @@ export class DeliverService {
       received
     };
     this.socket.emit('receive', data);
+    const task = this.createTask('receive', p2pFileInfo, p2pFileInfo.remoteId);
+    this.tasks.push(task);
     if (received) {
-      const connectionInfo = this.createConnectionInfo(p2pFileInfo.remoteId, p2pFileInfo);
+      const connectionInfo = this.createConnectionInfo(p2pFileInfo.remoteId, p2pFileInfo, task);
       this.connections.push(connectionInfo);
       this.prepareReceive(connectionInfo.remoteId);
+    } else {
+      task.state = 'rejected';
     }
   }
 
   createConnectionInfo(remoteId: string,
-                       file: File | P2PFileInfo): ConnectionInfo {
+                       file: File | P2PFileInfo,
+                       task: Task): ConnectionInfo {
+    this.findUser(remoteId).isTransferring = true;
     return {
       pc: new RTCPeerConnection(CONFIGURATION),
       remoteId,
       dataChannel: null,
       file: file instanceof File ? file : null,
-      // TODO: unite the File and P2PFileInfo so that it could be simple
-      fileName: file instanceof File ? file.name : file.fileName,
-      fileSize: file instanceof File ? file.size : file.fileSize,
+      fileName: file.name,
+      fileSize: file.size,
+      task,
+      isSending: false,
+      sliceCount: 0,
+      reader: null,
+      readOffset: 0,
       receivedBuffer: [],
       receivedSize: 0
     };
@@ -217,7 +284,16 @@ export class DeliverService {
     return -1;
   }
 
-  deleteConnectinoInfo(refer: string | RTCPeerConnection): void {
+  findUser(refer: string): User {
+    for (const user of this.users) {
+      if (refer === user.id) {
+        return user;
+      }
+    }
+    return null;
+  }
+
+  deleteConnectionInfo(refer: string | RTCPeerConnection): void {
     const index = this.findConnectionInfoIndex(refer);
     if (index >= 0) {
       this.connections.splice(index, 1);
@@ -296,47 +372,69 @@ export class DeliverService {
     });
   }
 
-  sendData(pc: RTCPeerConnection, sendChannel: RTCDataChannel): void {
-    const file = this.findConnectionInfo(pc).file;
+  calcProgress(currentSize: number, totalSize: number): number {
+    return Math.round(currentSize / totalSize * 100);
+  }
+
+  readSlice(file, offset, reader) {
+    const slice = file.slice(offset, offset + CHUNK_SIZE);
+    reader.readAsArrayBuffer(slice);
+  }
+
+  // TODO: the send percentage might need to get from the socket
+  beginSendData(connectionInfo: ConnectionInfo, sendChannel: RTCDataChannel): void {
+    const { file, task } = connectionInfo;
     console.log(`Begin send file: ${[file.name, file.size, file.type, file.lastModified].join(' ')}`);
 
     const fileReader = new FileReader();
-    let offset = 0;
+    connectionInfo.reader = fileReader;
     fileReader.addEventListener('error', error => console.error('Error reading file:', error));
     // TODO: enable to abort file transfer
     // fileReader.addEventListener('abort', event => console.log('File reading aborted:', event));
     fileReader.addEventListener('load', e => {
-      console.log('FileRead.onload ', e);
+      // console.log('FileRead.onload ', e);
       sendChannel.send((<any>e.target).result);
-      offset += (<any>e.target).result.byteLength;
-      if (offset < file.size) {
-        readSlice(offset);
+      connectionInfo.readOffset += (<any>e.target).result.byteLength;
+      if (connectionInfo.readOffset < file.size) {
+        task.progress = this.calcProgress(connectionInfo.readOffset, file.size);
+        // send SLICE_COUNT slice one time
+        if (connectionInfo.sliceCount < SLICE_COUNT) {
+          this.readSlice(file, connectionInfo.readOffset, fileReader);
+          connectionInfo.sliceCount++;
+        } else {
+          connectionInfo.sliceCount = 1;
+        }
+      } else {
+        task.progress = 100;
       }
     });
-    const readSlice = o => {
-      console.log('readSlice ', o);
-      const slice = file.slice(offset, o + CHUNK_SIZE);
-      fileReader.readAsArrayBuffer(slice);
-    };
-    readSlice(0);
+    this.readSlice(file, 0, fileReader);
+    connectionInfo.isSending = true;
+    connectionInfo.sliceCount++;
+  }
+
+  continueSend(connectionInfo: ConnectionInfo) {
+    this.readSlice(connectionInfo.file, connectionInfo.readOffset, connectionInfo.reader);
   }
 
   closeConnection(refer: RTCPeerConnection | string): void {
     const connectionInfo = this.findConnectionInfo(refer);
+    this.findUser(connectionInfo.remoteId).isTransferring = false;
     if (connectionInfo.dataChannel) {
       connectionInfo.dataChannel.close();
     }
     if (connectionInfo.pc) {
       connectionInfo.pc.close();
     }
-    this.deleteConnectinoInfo(refer);
+    this.deleteConnectionInfo(refer);
   }
 
   onSendChannelStateChange(pc: RTCPeerConnection, sendChannel: RTCDataChannel): void {
     const readyState = sendChannel.readyState;
     console.log(`Send channel state is: ${readyState}`);
     if (readyState === 'open') {
-      this.sendData(pc, sendChannel);
+      const connectionInfo = this.findConnectionInfo(pc);
+      this.beginSendData(connectionInfo, sendChannel);
     }
   }
 
@@ -358,25 +456,39 @@ export class DeliverService {
 
   // cannot find the class of event
   onReceiveMessageCallback(event, pc: RTCPeerConnection, receiveChannel: RTCDataChannel): void {
-    console.log(`Received Message ${event.data.byteLength}`);
+    // console.log(`Received Message ${event.data.byteLength}`);
     const connectionInfo = this.findConnectionInfo(pc);
     connectionInfo.receivedBuffer.push(event.data);
     connectionInfo.receivedSize += event.data.byteLength;
+    const task = connectionInfo.task;
 
     if (connectionInfo.receivedSize === connectionInfo.fileSize) {
-      const blob = new Blob(connectionInfo.receivedBuffer);
-      const url = URL.createObjectURL(blob);
+      task.progress = 100;
+      task.state = 'finished';
+      task.blob = new Blob(connectionInfo.receivedBuffer);
+      task.url = URL.createObjectURL(task.blob);
       // connectionInfo.receiveBuffer = [];
-      console.log('Received blob: ' + blob);
-
-      const link = document.createElement('a');
-      link.style.display = 'none';
-      link.href = url;
-      link.setAttribute('download', connectionInfo.fileName);
-      document.body.appendChild(link);
-      link.click();
+      console.log('Received blob: ' + task.blob);
 
       this.closeConnection(pc);
+      const receiveState: ReceiveState = {
+        state: 'finished',
+        remoteId: connectionInfo.remoteId
+      };
+      this.socket.emit('receiveState', receiveState);
+    } else {
+      task.progress = this.calcProgress(connectionInfo.receivedSize, connectionInfo.fileSize);
+      // TODO: the synchronous progress need to improve
+      connectionInfo.sliceCount++;
+      if (connectionInfo.sliceCount === SLICE_COUNT) {
+        const receiveState: ReceiveState = {
+          state: 'inProgress',
+          progress: task.progress,
+          remoteId: connectionInfo.remoteId
+        };
+        this.socket.emit('receiveState', receiveState);
+        connectionInfo.sliceCount = 0;
+      }
     }
   }
 

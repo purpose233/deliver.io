@@ -3,20 +3,11 @@
 .users-container {
   width: calc(100% - 32px);
   height: calc(100% - 32px);
-  display: flex;
-  align-items: center;
 
-  .user-container {
-    height: 90%;
-    margin-right: 20px;
-    display: flex;
-    align-items: center;
-    flex-direction: column;
+}
 
-    .transfer-btn {
-      @include md-icon-size(20px);
-    }
-  }
+.transfer-btn {
+  @include md-icon-size(20px);
 }
 
 .file-input {
