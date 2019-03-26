@@ -20,7 +20,7 @@ export class LoginComponent implements OnInit {
 
   login(): void {
     if (this.name == null || this.name === '') {
-      this.snackBar.open("Error: Name cannot be empty", null, {
+      this.snackBar.open('Error: Name cannot be empty', null, {
         duration: 2000,
         verticalPosition: 'top'
       });
