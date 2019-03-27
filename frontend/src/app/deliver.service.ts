@@ -5,7 +5,7 @@ import { List } from 'immutable';
 
 // The max cache size of data channel is 16mb, so the CHUNK_SIZE * SLICE_COUNT
 //  shouldn't be greater than 16mb.
-const CHUNK_SIZE = 256 * 1024;
+const CHUNK_SIZE = 16 * 1024;
 const SLICE_COUNT = 16;
 const CONFIGURATION = {
   iceServers: [
@@ -24,7 +24,7 @@ export interface User {
 // TODO: handle the relation with task
 export interface Task {
   type: 'send' | 'receive';
-  state: 'finished' | 'inProgress' | 'rejected';
+  state: 'finished' | 'inProgress' | 'waiting' | 'rejected';
   progress: number;
   remoteName: string;
   fileName: string;
@@ -33,7 +33,10 @@ export interface Task {
   blob: Blob;
   url: string;
   // the count of transferred Bytes per second
+  lastTime: number;
   speed: number;
+  // For now, it is only used for store the p2pFileInfo of waiting task
+  refFile: File | P2PFileInfo;
 }
 
 export interface P2PFileInfo {
@@ -124,6 +127,7 @@ export class DeliverService {
       console.log('socket on confirmSend');
       const connectionInfo = this.findConnectionInfo(data.remoteId);
       if (data.received) {
+        this.updateTaskState(connectionInfo.task, 'inProgress');
         this.prepareSend(connectionInfo.remoteId);
       } else {
         console.log('不样发送');
@@ -135,7 +139,10 @@ export class DeliverService {
     // data type: P2PFileInfo
     socket.on('confirmReceive', (data) => {
       console.log('socket on confirmReceive');
-      this.confirmReceive(true, data);
+      const p2pFileInfo: P2PFileInfo = data;
+      const task = this.createTask('receive', p2pFileInfo, p2pFileInfo.remoteId);
+      this.addTask(task);
+      this.setUserState(this.findUser(p2pFileInfo.remoteId), true);
     });
 
     // data type: CandidateInfo
@@ -191,7 +198,7 @@ export class DeliverService {
              remoteId: string): Task {
     return {
       type,
-      state: 'inProgress',
+      state: 'waiting',
       progress: 0,
       remoteName: this.findUser(remoteId).name,
       fileName: file.name,
@@ -199,7 +206,9 @@ export class DeliverService {
       fileType: file.type,
       blob: null,
       url: null,
-      speed: 0
+      speed: 0,
+      lastTime: 0,
+      refFile: file
     };
   }
 
@@ -208,13 +217,20 @@ export class DeliverService {
   }
 
   updateTask(task: Task, func) {
-    const taskList = this.tasks.getValue();
-    this.tasks.next(taskList.update(taskList.indexOf(task), func));
+    this.zone.run(() => {
+      const taskList = this.tasks.getValue();
+      this.tasks.next(taskList.update(taskList.indexOf(task), func));
+    });
   }
 
   updateTaskProgress(task: Task, progress: number) {
     this.updateTask(task, (val: Task) => {
       val.progress = progress;
+      const currentTime = new Date().getTime();
+      if (val.lastTime !== 0) {
+        val.speed = CHUNK_SIZE * SLICE_COUNT / (currentTime - val.lastTime) * 1000;
+      }
+      val.lastTime = currentTime;
       return val;
     });
   }
@@ -244,27 +260,28 @@ export class DeliverService {
     this.socket.emit('send', data);
   }
 
-  confirmReceive(received: boolean, p2pFileInfo: P2PFileInfo): void {
+  confirmReceive(allowReceive: boolean, task: Task): void {
+    const p2pFileInfo: P2PFileInfo = <P2PFileInfo>task.refFile;
     const data: ConfirmSendInfo = {
       remoteId: p2pFileInfo.remoteId,
-      received
+      received: allowReceive
     };
     this.socket.emit('receive', data);
-    const task = this.createTask('receive', p2pFileInfo, p2pFileInfo.remoteId);
-    this.addTask(task);
-    if (received) {
+    if (allowReceive) {
       const connectionInfo = this.createConnectionInfo(p2pFileInfo.remoteId, p2pFileInfo, task);
       this.connections.push(connectionInfo);
       this.prepareReceive(connectionInfo.remoteId);
+      this.updateTaskState(task, 'inProgress');
     } else {
       this.updateTaskState(task, 'rejected');
+      this.setUserState(this.findUser(p2pFileInfo.remoteId), false);
     }
   }
 
   createConnectionInfo(remoteId: string,
                        file: File | P2PFileInfo,
                        task: Task): ConnectionInfo {
-    this.findUser(remoteId).isTransferring = true;
+    this.setUserState(this.findUser(remoteId), true);
     return {
       pc: new RTCPeerConnection(CONFIGURATION),
       remoteId,
@@ -323,6 +340,12 @@ export class DeliverService {
       }
     }
     return null;
+  }
+
+  setUserState(user: User, isTransferring: boolean): void {
+    this.zone.run(() => {
+      user.isTransferring = isTransferring;
+    });
   }
 
   deleteConnectionInfo(refer: string | RTCPeerConnection): void {
@@ -408,7 +431,7 @@ export class DeliverService {
     return Math.round(currentSize / totalSize * 100);
   }
 
-  readSlice(file, offset, reader) {
+  readSlice(file, offset, reader): void {
     const slice = file.slice(offset, offset + CHUNK_SIZE);
     reader.readAsArrayBuffer(slice);
   }
@@ -428,12 +451,12 @@ export class DeliverService {
       sendChannel.send((<any>e.target).result);
       connectionInfo.readOffset += (<any>e.target).result.byteLength;
       if (connectionInfo.readOffset < file.size) {
-        this.updateTaskProgress(task, this.calcProgress(connectionInfo.readOffset, file.size));
         // send SLICE_COUNT slice one time
         if (connectionInfo.sliceCount < SLICE_COUNT) {
           this.readSlice(file, connectionInfo.readOffset, fileReader);
           connectionInfo.sliceCount++;
         } else {
+          this.updateTaskProgress(task, this.calcProgress(connectionInfo.readOffset, file.size));
           connectionInfo.sliceCount = 1;
         }
       } else {
@@ -445,13 +468,13 @@ export class DeliverService {
     connectionInfo.sliceCount++;
   }
 
-  continueSend(connectionInfo: ConnectionInfo) {
+  continueSend(connectionInfo: ConnectionInfo): void {
     this.readSlice(connectionInfo.file, connectionInfo.readOffset, connectionInfo.reader);
   }
 
   closeConnection(refer: RTCPeerConnection | string): void {
     const connectionInfo = this.findConnectionInfo(refer);
-    this.findUser(connectionInfo.remoteId).isTransferring = false;
+    this.setUserState(this.findUser(connectionInfo.remoteId), false);
     if (connectionInfo.dataChannel) {
       connectionInfo.dataChannel.close();
     }
@@ -494,16 +517,17 @@ export class DeliverService {
     connectionInfo.receivedSize += event.data.byteLength;
     const task = connectionInfo.task;
 
+    if (task.lastTime === 0) {
+      task.lastTime = new Date().getTime();
+    }
     if (connectionInfo.receivedSize === connectionInfo.fileSize) {
-      this.zone.run(() => {
-        this.updateTask(task, (val: Task) => {
+      this.updateTask(task, (val: Task) => {
           val.progress = 100;
           val.state = 'finished';
           val.blob = new Blob(connectionInfo.receivedBuffer);
           val.url = URL.createObjectURL(val.blob);
           return val;
         });
-      });
       // connectionInfo.receiveBuffer = [];
       console.log('Received blob: ' + task.blob);
 
@@ -517,9 +541,7 @@ export class DeliverService {
       // TODO: the synchronous progress need to improve
       connectionInfo.sliceCount++;
       if (connectionInfo.sliceCount === SLICE_COUNT) {
-        this.zone.run(() => {
-          this.updateTaskProgress(task, this.calcProgress(connectionInfo.receivedSize, connectionInfo.fileSize));
-        });
+        this.updateTaskProgress(task, this.calcProgress(connectionInfo.receivedSize, connectionInfo.fileSize));
         const receiveState: ReceiveState = {
           state: 'inProgress',
           progress: task.progress,
@@ -538,7 +560,7 @@ export class DeliverService {
     }
   }
 
-  onDataChannelError(error: RTCErrorEvent) {
+  onDataChannelError(error: RTCErrorEvent): void {
     console.error('Error in sendChannel:', error);
   }
 

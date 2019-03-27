@@ -16,10 +16,13 @@
             <p class="speed-label">{{ formatSpeed(task.speed) }}</p>
           </div>
           <div *ngSwitchCase="'finished'">
-            <p class="finish-label">Finished</p>
+            <p class="state-label">Finished</p>
+          </div>
+          <div *ngSwitchCase="'waiting'">
+            <p class="state-label">Waiting</p>
           </div>
           <div *ngSwitchCase="'rejected'">
-            <p class="finish-label">Rejected</p>
+            <p class="state-label">Rejected</p>
           </div>
         </div>
       </mat-list-item>
@@ -41,8 +44,16 @@
               <mat-icon>save_alt</mat-icon>
             </button>
           </div>
+          <div *ngSwitchCase="'waiting'" class="two-button-div">
+            <button mat-raised-button class="first-button" (click)="rejectFile(task)">
+              <mat-icon>blocked</mat-icon>
+            </button>
+            <button mat-raised-button (click)="acceptFile(task)">
+              <mat-icon>check_circle_outline</mat-icon>
+            </button>
+          </div>
           <div *ngSwitchCase="'rejected'">
-            <p class="finish-label">Rejected</p>
+            <p class="state-label">Rejected</p>
           </div>
         </div>
       </mat-list-item>

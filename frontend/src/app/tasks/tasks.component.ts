@@ -17,7 +17,7 @@ export class TasksComponent implements OnInit {
 
   formatBytes(bytes: number, fractionDigits: number = 2): string {
     if (bytes < 1024) {
-      return bytes + 'Byte';
+      return bytes.toFixed(fractionDigits) + 'Byte';
     } else if (bytes < 1024 ** 2) {
       return (bytes / 1024).toFixed(fractionDigits) + 'KB';
     } else if (bytes < 1024 ** 3) {
@@ -35,7 +35,7 @@ export class TasksComponent implements OnInit {
     return this.formatBytes(speed, 1) + '/s';
   }
 
-  downloadFile(url: string, fileName: string) {
+  downloadFile(url: string, fileName: string): void {
     const link = document.createElement('a');
     link.style.display = 'none';
     link.href = url;
@@ -43,5 +43,13 @@ export class TasksComponent implements OnInit {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  rejectFile(task: Task): void {
+    this.deliverService.confirmReceive(false, task);
+  }
+
+  acceptFile(task: Task): void {
+    this.deliverService.confirmReceive(true, task);
   }
 }
