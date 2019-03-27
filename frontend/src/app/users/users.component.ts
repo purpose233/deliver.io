@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { DeliverService } from '../deliver.service';
+import { DeliverService, User } from '../deliver.service';
 
 @Component({
   selector: 'app-users',
@@ -8,11 +8,14 @@ import { DeliverService } from '../deliver.service';
   styleUrls: ['./users.component.scss']
 })
 export class UsersComponent implements OnInit {
+  users: User[];
 
   constructor(private deliverService: DeliverService,
-              private snackBar: MatSnackBar) { }
+              private snackBar: MatSnackBar) {
+  }
 
   ngOnInit() {
+    this.deliverService.usersObservable.subscribe(users => this.users = users);
   }
 
   triggerFileInput(remoteId: string) {

@@ -1,7 +1,7 @@
 <mat-card class="tasks-container">
   <mat-list>
     <h3 mat-subheader>Tasks</h3>
-    <div *ngFor="let task of deliverService.tasks" [ngSwitch]="task.type">
+    <div *ngFor="let task of tasks" [ngSwitch]="task.type">
       <mat-list-item *ngSwitchCase="'send'">
         <mat-icon mat-list-icon>cloud_upload</mat-icon>
         <h4 mat-line><b>{{ task.fileName }}</b></h4>
@@ -22,37 +22,11 @@
             <p class="finish-label">Rejected</p>
           </div>
         </div>
-        <!--<div *ngIf="task.progress < 100; then unfinished else finished"></div>-->
-        <!--<ng-template #unfinished>-->
-          <!--<mat-progress-bar-->
-            <!--[color]="'primary'"-->
-            <!--[mode]="'determinate'"-->
-            <!--[value]="task.progress"-->
-          <!--&gt;</mat-progress-bar>-->
-          <!--<p class="speed-label">{{ formatSpeed(task.speed) }}</p>-->
-        <!--</ng-template>-->
-        <!--<ng-template #finished>-->
-          <!--<p class="finish-label">Finished</p>-->
-        <!--</ng-template>-->
       </mat-list-item>
       <mat-list-item *ngSwitchCase="'receive'">
         <mat-icon mat-list-icon>cloud_download</mat-icon>
         <h4 mat-line><b>{{ task.fileName }}</b></h4>
         <p mat-line>{{formatFileSize(task.fileSize)}} <b>From:</b> {{task.remoteName}}</p>
-        <!--<div *ngIf="task.progress < 100; then unfinished else finished"></div>-->
-        <!--<ng-template #unfinished>-->
-          <!--<mat-progress-bar-->
-            <!--[color]="'primary'"-->
-            <!--[mode]="'determinate'"-->
-            <!--[value]="task.progress"-->
-          <!--&gt;</mat-progress-bar>-->
-          <!--<p class="speed-label">{{ formatSpeed(task.speed) }}</p>-->
-        <!--</ng-template>-->
-        <!--<ng-template #finished>-->
-          <!--<button mat-raised-button>-->
-            <!--<mat-icon>save_alt</mat-icon>-->
-          <!--</button>-->
-        <!--</ng-template>-->
         <div [ngSwitch]="task.state">
           <div *ngSwitchCase="'inProgress'">
             <mat-progress-bar

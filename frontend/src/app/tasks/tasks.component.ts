@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { DeliverService } from '../deliver.service';
+import { DeliverService, Task } from '../deliver.service';
 
 @Component({
   selector: 'app-tasks',
@@ -7,17 +7,12 @@ import { DeliverService } from '../deliver.service';
   styleUrls: ['./tasks.component.scss']
 })
 export class TasksComponent implements OnInit {
-
-  // tasks = [
-  //   {type: 'send',    remoteName: 'fdsaa', fileName: 'movies001.mp4', fileSize: 10024,  progress: 50,  url: null, speed: 256000},
-  //   {type: 'receive', remoteName: 'fasfads', fileName: 'movies001.mp4', fileSize: 102004, progress: 50,  url: null,  speed: 2560},
-  //   {type: 'send',    remoteName: '啊啊啊', fileName: 'movies001.mp4', fileSize: 10024,  progress: 100, url: 'fasdfsa', speed: 0},
-  //   {type: 'receive', remoteName: '发的发生发达撒发放', fileName: 'movies001.mp4', fileSize: 102004, progress: 100, url: 'sdfsaf', speed: 0},
-  // ];
+  tasks;
 
   constructor(private deliverService: DeliverService) { }
 
   ngOnInit() {
+    this.deliverService.tasksObservable.subscribe(tasks => this.tasks = tasks);
   }
 
   formatBytes(bytes: number, fractionDigits: number = 2): string {

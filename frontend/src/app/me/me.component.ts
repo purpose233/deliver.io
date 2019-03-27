@@ -9,6 +9,7 @@ import { MatIconRegistry } from '@angular/material';
   styleUrls: ['./me.component.scss']
 })
 export class MeComponent implements OnInit {
+  name: string;
 
   constructor(private iconRegistry: MatIconRegistry,
               private sanitizer: DomSanitizer,
@@ -19,6 +20,6 @@ export class MeComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.deliverService.nameObservable.subscribe(name => this.name = name);
   }
-
 }

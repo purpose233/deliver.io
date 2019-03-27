@@ -1,5 +1,7 @@
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 import { Socket } from 'ngx-socket-io';
+import { BehaviorSubject } from 'rxjs';
+import { List } from 'immutable';
 
 // The max cache size of data channel is 16mb, so the CHUNK_SIZE * SLICE_COUNT
 //  shouldn't be greater than 16mb.
@@ -89,25 +91,32 @@ export interface ErrorInfo {
 }
 
 // TODO: handle multiple p2p transfer
-// TODO: add sending status for send button
 
 @Injectable({
   providedIn: 'root'
 })
 export class DeliverService {
-  name: string;
-  users: User[];
-  connections: ConnectionInfo[] = [];
-  tasks: Task[] = [];
+  private name = new BehaviorSubject<string>(null);
+  nameObservable = this.name.asObservable();
+  private users = new BehaviorSubject<User[]>([]);
+  usersObservable = this.users.asObservable();
+  // TODO: don't know the type of List
+  private tasks = new BehaviorSubject(List([]));
+  // private tasks = new BehaviorSubject<Task[]>([]);
+  tasksObservable = this.tasks.asObservable();
 
-  constructor(private socket: Socket) {
+  connections: ConnectionInfo[] = [];
+  // tasks: Task[] = [];
+
+  constructor(private socket: Socket,
+              private zone: NgZone) {
     // data type: User
     socket.on('users', (data) => {
       const userInfo: User[] = data;
       for (const user of userInfo) {
         user.isTransferring = false;
       }
-      this.users = userInfo;
+      this.users.next(userInfo);
     });
 
     // data type: ConfirmSendInfo
@@ -118,7 +127,7 @@ export class DeliverService {
         this.prepareSend(connectionInfo.remoteId);
       } else {
         console.log('不样发送');
-        connectionInfo.task.state = 'rejected';
+        this.updateTaskState(connectionInfo.task, 'rejected');
         this.closeConnection(data.remoteId);
       }
     });
@@ -164,7 +173,7 @@ export class DeliverService {
       const receiveState: ReceiveState = data;
       const connectionInfo = this.findConnectionInfo(receiveState.remoteId);
       if (receiveState.state === 'finished') {
-        connectionInfo.task.state = 'finished';
+        this.updateTaskState(connectionInfo.task, 'finished');
         this.closeConnection(receiveState.remoteId);
       } else if (receiveState.state === 'inProgress') {
         this.continueSend(connectionInfo);
@@ -194,6 +203,29 @@ export class DeliverService {
     };
   }
 
+  addTask(task: Task) {
+    this.tasks.next(this.tasks.getValue().push(task));
+  }
+
+  updateTask(task: Task, func) {
+    const taskList = this.tasks.getValue();
+    this.tasks.next(taskList.update(taskList.indexOf(task), func));
+  }
+
+  updateTaskProgress(task: Task, progress: number) {
+    this.updateTask(task, (val: Task) => {
+      val.progress = progress;
+      return val;
+    });
+  }
+
+  updateTaskState(task: Task, state: 'finished' | 'inProgress' | 'rejected') {
+    this.updateTask(task, (val: Task) => {
+      val.state = state;
+      return val;
+    });
+  }
+
   checkFile(file: File): boolean {
     return file.size !== 0;
   }
@@ -206,7 +238,7 @@ export class DeliverService {
       remoteId, remoteName: null
     };
     const task = this.createTask('send', file, remoteId);
-    this.tasks.push(task);
+    this.addTask(task);
     const connectionInfo = this.createConnectionInfo(remoteId, file, task);
     this.connections.push(connectionInfo);
     this.socket.emit('send', data);
@@ -219,13 +251,13 @@ export class DeliverService {
     };
     this.socket.emit('receive', data);
     const task = this.createTask('receive', p2pFileInfo, p2pFileInfo.remoteId);
-    this.tasks.push(task);
+    this.addTask(task);
     if (received) {
       const connectionInfo = this.createConnectionInfo(p2pFileInfo.remoteId, p2pFileInfo, task);
       this.connections.push(connectionInfo);
       this.prepareReceive(connectionInfo.remoteId);
     } else {
-      task.state = 'rejected';
+      this.updateTaskState(task, 'rejected');
     }
   }
 
@@ -285,7 +317,7 @@ export class DeliverService {
   }
 
   findUser(refer: string): User {
-    for (const user of this.users) {
+    for (const user of this.users.getValue()) {
       if (refer === user.id) {
         return user;
       }
@@ -396,7 +428,7 @@ export class DeliverService {
       sendChannel.send((<any>e.target).result);
       connectionInfo.readOffset += (<any>e.target).result.byteLength;
       if (connectionInfo.readOffset < file.size) {
-        task.progress = this.calcProgress(connectionInfo.readOffset, file.size);
+        this.updateTaskProgress(task, this.calcProgress(connectionInfo.readOffset, file.size));
         // send SLICE_COUNT slice one time
         if (connectionInfo.sliceCount < SLICE_COUNT) {
           this.readSlice(file, connectionInfo.readOffset, fileReader);
@@ -405,7 +437,7 @@ export class DeliverService {
           connectionInfo.sliceCount = 1;
         }
       } else {
-        task.progress = 100;
+        this.updateTaskProgress(task, 100);
       }
     });
     this.readSlice(file, 0, fileReader);
@@ -463,10 +495,15 @@ export class DeliverService {
     const task = connectionInfo.task;
 
     if (connectionInfo.receivedSize === connectionInfo.fileSize) {
-      task.progress = 100;
-      task.state = 'finished';
-      task.blob = new Blob(connectionInfo.receivedBuffer);
-      task.url = URL.createObjectURL(task.blob);
+      this.zone.run(() => {
+        this.updateTask(task, (val: Task) => {
+          val.progress = 100;
+          val.state = 'finished';
+          val.blob = new Blob(connectionInfo.receivedBuffer);
+          val.url = URL.createObjectURL(val.blob);
+          return val;
+        });
+      });
       // connectionInfo.receiveBuffer = [];
       console.log('Received blob: ' + task.blob);
 
@@ -477,10 +514,12 @@ export class DeliverService {
       };
       this.socket.emit('receiveState', receiveState);
     } else {
-      task.progress = this.calcProgress(connectionInfo.receivedSize, connectionInfo.fileSize);
       // TODO: the synchronous progress need to improve
       connectionInfo.sliceCount++;
       if (connectionInfo.sliceCount === SLICE_COUNT) {
+        this.zone.run(() => {
+          this.updateTaskProgress(task, this.calcProgress(connectionInfo.receivedSize, connectionInfo.fileSize));
+        });
         const receiveState: ReceiveState = {
           state: 'inProgress',
           progress: task.progress,
@@ -504,7 +543,8 @@ export class DeliverService {
   }
 
   sendName(name: string) {
-    this.name = name;
+    // this.name = name;
+    this.name.next(name);
     this.socket.emit('name', { name });
   }
 }

@@ -1,7 +1,7 @@
 <mat-card class="users-container">
   <mat-list>
     <h3 mat-subheader>users</h3>
-    <mat-list-item *ngFor="let user of deliverService.users">
+    <mat-list-item *ngFor="let user of users">
       <mat-icon mat-list-icon svgIcon="user-secret"></mat-icon>
       <h4 mat-line><b>{{user.name}}</b></h4>
       <input
