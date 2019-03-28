@@ -1,5 +1,5 @@
 <mat-card class="users-container">
-  <mat-list>
+  <mat-list class="users-list-container">
     <h3 mat-subheader>users</h3>
     <mat-list-item *ngFor="let user of users">
       <mat-icon mat-list-icon svgIcon="user-secret"></mat-icon>
@@ -8,7 +8,7 @@
         class="file-input"
         id="{{ 'fileInput' + user.id }}"
         type="file"
-        (change)="send(user.id)"
+        (change)="send($event, user.id)"
       />
       <button
         mat-raised-button

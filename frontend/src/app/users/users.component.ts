@@ -23,8 +23,8 @@ export class UsersComponent implements OnInit {
     input.click();
   }
 
-  send(remoteId: string) {
-    const input = document.getElementById('fileInput' + remoteId);
+  send(event: Event, remoteId: string) {
+    const input = event.target;
     const file: File = (<any>input).files[0];
     if (this.deliverService.checkFile(file)) {
       this.deliverService.commitSend(remoteId, file);
@@ -34,9 +34,6 @@ export class UsersComponent implements OnInit {
         verticalPosition: 'top'
       });
     }
-  }
-
-  async prepareConnection() {
-
+    (<any>event.target).value = '';
   }
 }

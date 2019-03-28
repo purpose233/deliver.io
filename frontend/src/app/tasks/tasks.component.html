@@ -1,5 +1,5 @@
 <mat-card class="tasks-container">
-  <mat-list>
+  <mat-list class="tasks-list-container">
     <h3 mat-subheader>Tasks</h3>
     <div *ngFor="let task of tasks" [ngSwitch]="task.type">
       <mat-list-item *ngSwitchCase="'send'">
@@ -7,22 +7,48 @@
         <h4 mat-line><b>{{ task.fileName }}</b></h4>
         <p mat-line>{{formatFileSize(task.fileSize)}} <b>To:</b> {{task.remoteName}}</p>
         <div [ngSwitch]="task.state">
-          <div *ngSwitchCase="'inProgress'">
+          <div *ngSwitchCase="'inProgress'" class="task-tools-div">
             <mat-progress-bar
               [color]="'primary'"
               [mode]="'determinate'"
               [value]="task.progress"
             ></mat-progress-bar>
+            <button
+              mat-raised-button
+              (click)="abortTransfer(task)"
+              matTooltip="abort file transferring"
+              class="abort-button"
+            >
+              <mat-icon>cancel</mat-icon>
+            </button>
             <p class="speed-label">{{ formatSpeed(task.speed) }}</p>
           </div>
-          <div *ngSwitchCase="'finished'">
+          <div *ngSwitchCase="'finished'" class="task-tools-div">
+            <button mat-button class="clear-button" (click)="clearTask(task)">
+              <mat-icon>clear</mat-icon>
+            </button>
             <p class="state-label">Finished</p>
           </div>
-          <div *ngSwitchCase="'waiting'">
-            <p class="state-label">Waiting</p>
+          <div *ngSwitchCase="'waiting'" class="task-tools-div">
+            <button
+              mat-raised-button
+              (click)="cancelSend(task)"
+              matTooltip="cancel file sending request"
+            >
+              <mat-icon>cancel</mat-icon>
+            </button>
           </div>
-          <div *ngSwitchCase="'rejected'">
+          <div *ngSwitchCase="'rejected'" class="task-tools-div">
+            <button mat-button class="clear-button" (click)="clearTask(task)">
+              <mat-icon>clear</mat-icon>
+            </button>
             <p class="state-label">Rejected</p>
+          </div>
+          <div *ngSwitchCase="'aborted'" class="task-tools-div">
+            <button mat-button class="clear-button" (click)="clearTask(task)">
+              <mat-icon>clear</mat-icon>
+            </button>
+            <p class="state-label">Aborted</p>
           </div>
         </div>
       </mat-list-item>
@@ -31,29 +57,62 @@
         <h4 mat-line><b>{{ task.fileName }}</b></h4>
         <p mat-line>{{formatFileSize(task.fileSize)}} <b>From:</b> {{task.remoteName}}</p>
         <div [ngSwitch]="task.state">
-          <div *ngSwitchCase="'inProgress'">
+          <div *ngSwitchCase="'inProgress'" class="task-tools-div">
             <mat-progress-bar
               [color]="'primary'"
               [mode]="'determinate'"
               [value]="task.progress"
             ></mat-progress-bar>
+            <button
+              mat-raised-button
+              (click)="abortTransfer(task)"
+              matTooltip="abort file transferring"
+              class="abort-button"
+            >
+              <mat-icon>cancel</mat-icon>
+            </button>
             <p class="speed-label">{{ formatSpeed(task.speed) }}</p>
           </div>
-          <div *ngSwitchCase="'finished'">
-            <button mat-raised-button (click)="downloadFile(task.url, task.fileName)">
+          <div *ngSwitchCase="'finished'" class="task-tools-div">
+            <button mat-button class="clear-button" (click)="clearTask(task)">
+              <mat-icon>clear</mat-icon>
+            </button>
+            <button
+              mat-raised-button
+              (click)="downloadFile(task.url, task.fileName)"
+              matTooltip="download file"
+            >
               <mat-icon>save_alt</mat-icon>
             </button>
           </div>
-          <div *ngSwitchCase="'waiting'" class="two-button-div">
-            <button mat-raised-button class="first-button" (click)="rejectFile(task)">
-              <mat-icon>blocked</mat-icon>
-            </button>
-            <button mat-raised-button (click)="acceptFile(task)">
+          <div *ngSwitchCase="'waiting'" class="task-tools-div">
+            <button
+              mat-raised-button
+              matTooltip="accept file transferring"
+              (click)="acceptFile(task)"
+            >
               <mat-icon>check_circle_outline</mat-icon>
             </button>
+            <button
+              mat-raised-button
+              matTooltip="reject file transferring"
+              (click)="rejectFile(task)"
+              class="margin-button"
+            >
+              <mat-icon>not_interested</mat-icon>
+            </button>
           </div>
-          <div *ngSwitchCase="'rejected'">
+          <div *ngSwitchCase="'rejected'" class="task-tools-div">
+            <button mat-button class="clear-button" (click)="clearTask(task)">
+              <mat-icon>clear</mat-icon>
+            </button>
             <p class="state-label">Rejected</p>
+          </div>
+          <div *ngSwitchCase="'aborted'" class="task-tools-div">
+            <button mat-button class="clear-button" (click)="clearTask(task)">
+              <mat-icon>clear</mat-icon>
+            </button>
+            <p class="state-label">Aborted</p>
           </div>
         </div>
       </mat-list-item>

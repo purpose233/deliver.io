@@ -120,6 +120,17 @@ module.exports = function (io) {
       remoteUser.socket.emit('receiveState', data);
     });
 
+    // data type: BasicInfo
+    socket.on('abort', function(data) {
+      console.log('socket on abort from' + name);
+      let remoteUser = findUser(data.remoteId);
+      if (!remoteUser) {
+        // TODO: send error
+      }
+      data.remoteId = socket.id;
+      remoteUser.socket.emit('abort', data);
+    });
+
     socket.on('disconnect', function() {
       deleteUser(socket);
       updateUsers();

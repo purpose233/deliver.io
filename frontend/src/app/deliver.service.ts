@@ -21,12 +21,17 @@ export interface User {
   isTransferring?: boolean;
 }
 
+export interface BasicInfo {
+  remoteId: string;
+}
+
 // TODO: handle the relation with task
 export interface Task {
   type: 'send' | 'receive';
-  state: 'finished' | 'inProgress' | 'waiting' | 'rejected';
+  state: 'inProgress' | 'finished' | 'waiting' | 'rejected' | 'aborted';
   progress: number;
   remoteName: string;
+  remoteId: string;
   fileName: string;
   fileSize: number;
   fileType: string;
@@ -35,8 +40,6 @@ export interface Task {
   // the count of transferred Bytes per second
   lastTime: number;
   speed: number;
-  // For now, it is only used for store the p2pFileInfo of waiting task
-  refFile: File | P2PFileInfo;
 }
 
 export interface P2PFileInfo {
@@ -52,6 +55,7 @@ export interface ConfirmSendInfo {
   received: boolean;
 }
 
+// TODO: divide the connectionInfo into sendingInfo and receivingInfo
 export interface ConnectionInfo {
   pc: RTCPeerConnection;
   dataChannel: RTCDataChannel;
@@ -143,6 +147,8 @@ export class DeliverService {
       const task = this.createTask('receive', p2pFileInfo, p2pFileInfo.remoteId);
       this.addTask(task);
       this.setUserState(this.findUser(p2pFileInfo.remoteId), true);
+      const connectionInfo = this.createConnectionInfo(p2pFileInfo.remoteId, p2pFileInfo, task);
+      this.connections.push(connectionInfo);
     });
 
     // data type: CandidateInfo
@@ -187,6 +193,20 @@ export class DeliverService {
       }
     });
 
+    // data type: BasicInfo
+    socket.on('abort', (data) => {
+      const { remoteId } = data;
+      const connectionInfo = this.findConnectionInfo(remoteId);
+      if (connectionInfo) {
+        const { task, reader } = connectionInfo;
+        if (reader) {
+          reader.abort();
+        }
+        this.updateTaskState(task, 'aborted');
+        this.closeConnection(remoteId);
+      }
+    });
+
     // data type: ErrorInfo
     socket.on('error', (data) => {
 
@@ -197,7 +217,7 @@ export class DeliverService {
              file: File | P2PFileInfo,
              remoteId: string): Task {
     return {
-      type,
+      type, remoteId,
       state: 'waiting',
       progress: 0,
       remoteName: this.findUser(remoteId).name,
@@ -207,13 +227,14 @@ export class DeliverService {
       blob: null,
       url: null,
       speed: 0,
-      lastTime: 0,
-      refFile: file
+      lastTime: 0
     };
   }
 
   addTask(task: Task) {
-    this.tasks.next(this.tasks.getValue().push(task));
+    this.zone.run(() => {
+      this.tasks.next(this.tasks.getValue().push(task));
+    });
   }
 
   updateTask(task: Task, func) {
@@ -235,11 +256,32 @@ export class DeliverService {
     });
   }
 
-  updateTaskState(task: Task, state: 'finished' | 'inProgress' | 'rejected') {
+  updateTaskState(task: Task, state: 'finished' | 'inProgress' | 'rejected' | 'aborted') {
     this.updateTask(task, (val: Task) => {
       val.state = state;
       return val;
     });
+  }
+
+  deleteTask(task: Task) {
+    this.zone.run(() => {
+      const taskList = this.tasks.getValue();
+      this.tasks.next(taskList.delete(taskList.indexOf(task)));
+    });
+  }
+
+  abortTask(task: Task) {
+    const { remoteId } = task;
+    if (task.type === 'send') {
+      const { reader } = this.findConnectionInfo(remoteId);
+      if (reader) {
+        reader.abort();
+      }
+    }
+    const abortInfo: BasicInfo = { remoteId };
+    this.socket.emit('abort', abortInfo);
+    this.updateTaskState(task, 'aborted');
+    this.closeConnection(remoteId);
   }
 
   checkFile(file: File): boolean {
@@ -260,21 +302,28 @@ export class DeliverService {
     this.socket.emit('send', data);
   }
 
+  cancelSend(task: Task) {
+    const cancelInfo: BasicInfo = {
+      remoteId: task.remoteId
+    };
+    this.socket.emit('abort', cancelInfo);
+    this.updateTaskState(task, 'aborted');
+    this.closeConnection(task.remoteId);
+  }
+
   confirmReceive(allowReceive: boolean, task: Task): void {
-    const p2pFileInfo: P2PFileInfo = <P2PFileInfo>task.refFile;
     const data: ConfirmSendInfo = {
-      remoteId: p2pFileInfo.remoteId,
+      remoteId: task.remoteId,
       received: allowReceive
     };
     this.socket.emit('receive', data);
     if (allowReceive) {
-      const connectionInfo = this.createConnectionInfo(p2pFileInfo.remoteId, p2pFileInfo, task);
-      this.connections.push(connectionInfo);
-      this.prepareReceive(connectionInfo.remoteId);
+      this.prepareReceive(task.remoteId);
       this.updateTaskState(task, 'inProgress');
     } else {
       this.updateTaskState(task, 'rejected');
-      this.setUserState(this.findUser(p2pFileInfo.remoteId), false);
+      this.setUserState(this.findUser(task.remoteId), false);
+      this.closeConnection(task.remoteId);
     }
   }
 
@@ -463,6 +512,9 @@ export class DeliverService {
         this.updateTaskProgress(task, 100);
       }
     });
+    fileReader.addEventListener('abort', e => {
+      console.log('File sending abort');
+    });
     this.readSlice(file, 0, fileReader);
     connectionInfo.isSending = true;
     connectionInfo.sliceCount++;
@@ -474,6 +526,7 @@ export class DeliverService {
 
   closeConnection(refer: RTCPeerConnection | string): void {
     const connectionInfo = this.findConnectionInfo(refer);
+    if (!connectionInfo) { return; }
     this.setUserState(this.findUser(connectionInfo.remoteId), false);
     if (connectionInfo.dataChannel) {
       connectionInfo.dataChannel.close();
@@ -513,6 +566,8 @@ export class DeliverService {
   onReceiveMessageCallback(event, pc: RTCPeerConnection, receiveChannel: RTCDataChannel): void {
     // console.log(`Received Message ${event.data.byteLength}`);
     const connectionInfo = this.findConnectionInfo(pc);
+    // If the event or event.data is null, then the transferring must be aborted or go wrong.
+    if (!event || !event.data) { return; }
     connectionInfo.receivedBuffer.push(event.data);
     connectionInfo.receivedSize += event.data.byteLength;
     const task = connectionInfo.task;

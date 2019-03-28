@@ -9,7 +9,7 @@ import { FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatButtonModule, MatInputModule, MatIconModule,
   MatCardModule, MatGridListModule, MatListModule,
-  MatProgressBarModule, MatSnackBarModule } from '@angular/material';
+  MatProgressBarModule, MatSnackBarModule, MatTooltipModule } from '@angular/material';
 
 import { UsersComponent } from './users/users.component';
 import { MeComponent } from './me/me.component';
@@ -42,7 +42,8 @@ const config: SocketIoConfig = { url: '', options: {} };
     MatGridListModule,
     MatListModule,
     MatProgressBarModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    MatTooltipModule
   ],
   providers: [],
   bootstrap: [AppComponent]

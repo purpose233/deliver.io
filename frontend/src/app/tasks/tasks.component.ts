@@ -52,4 +52,16 @@ export class TasksComponent implements OnInit {
   acceptFile(task: Task): void {
     this.deliverService.confirmReceive(true, task);
   }
+
+  clearTask(task: Task): void {
+    this.deliverService.deleteTask(task);
+  }
+
+  cancelSend(task: Task): void {
+    this.deliverService.cancelSend(task);
+  }
+
+  abortTransfer(task: Task): void {
+    this.deliverService.abortTask(task);
+  }
 }
